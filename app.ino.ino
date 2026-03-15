@@ -39,45 +39,36 @@ pinMode(relayPins[i],OUTPUT);
 
 void loop()
 {
-
-if(millis()-lastCheck>5000)
-{
-
-lastCheck=millis();
-
-HTTPClient http;
-
-/* heartbeat */
-
-http.begin(client,server+"/heartbeat");
-http.GET();
-http.end();
-
-/* read relay state */
-
-http.begin(client,server+"/read");
-
-int code=http.GET();
-
-if(code==200)
-{
-
-String payload=http.getString();
-
-for(int i=0;i<8;i++)
-{
-
-if(payload[i]=='G')
-digitalWrite(relayPins[i],HIGH);
-else
-digitalWrite(relayPins[i],LOW);
-
+if(millis()-lastCheck>5000) {
+    lastCheck=millis();
+    HTTPClient http;
+    
+    /* heartbeat */
+    http.begin(client, server + "/");  // Root path
+    http.addHeader("User-Agent", "ESP-Heartbeat");
+    int hbCode = http.GET();
+    Serial.println("Heartbeat code: " + String(hbCode));
+    http.end();
+    
+    /* read relay state */
+    http.begin(client, server + "/");  // Root path
+    http.addHeader("User-Agent", "ESP-Read");
+    int code = http.GET();
+    Serial.println("Read code: " + String(code));
+    if(code==200) {
+        String payload = http.getString();
+        Serial.println("Payload: " + payload);
+        for(int i=0; i<8; i++) {
+            if(payload[i]=='G')
+                digitalWrite(relayPins[i], HIGH);
+            else
+                digitalWrite(relayPins[i], LOW);
+        }
+    }
+    http.end();
 }
 
-}
 
-http.end();
 
-}
 
 }
