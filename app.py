@@ -1,48 +1,34 @@
 import streamlit as st
 import time
 import os
-from streamlit.runtime.scriptrunner import get_script_run_ctx
 
 RELAY_FILE = "relay.txt"
 HB_FILE = "last_hb_time.txt"
+PING_FILE = "ping.txt"  # ESP creates this file
 
 # Create files if missing
-if not os.path.exists(RELAY_FILE):
-    with open(RELAY_FILE, "w") as f:
-        f.write("RRRRRRRR")
+for f in [RELAY_FILE, HB_FILE, PING_FILE]:
+    if not os.path.exists(f):
+        with open(f, "w") as file:
+            if f == RELAY_FILE:
+                file.write("RRRRRRRR")
+            elif f == HB_FILE:
+                file.write("0")
+            else:
+                file.write("")
 
-if not os.path.exists(HB_FILE):
-    with open(HB_FILE, "w") as f:
-        f.write("0")
+params = st.query_params
 
-# Get request headers to detect ESP requests
-ctx = get_script_run_ctx()
-is_esp_request = False
-request_type = ""
-
-if ctx and hasattr(ctx.session_state, '_session_info') and ctx.session_state._session_info.ws:
-    try:
-        headers = dict(ctx.session_state._session_info.ws.request.headers)
-        user_agent = headers.get('user-agent', '').lower()
-        
-        if 'esp-heartbeat' in user_agent:
-            is_esp_request = True
-            request_type = "heartbeat"
-        elif 'esp-read' in user_agent:
-            is_esp_request = True
-            request_type = "read"
-    except:
-        pass
-
-# Handle ESP heartbeat
-if is_esp_request and request_type == "heartbeat":
+# Simple ping detection - ESP just needs to create a file
+if os.path.exists(PING_FILE) and os.path.getmtime(PING_FILE) > time.time() - 1:
+    os.remove(PING_FILE)
     with open(HB_FILE, "w") as f:
         f.write(str(time.time()))
     st.text("OK")
     st.stop()
 
-# Handle ESP reading relay state
-if is_esp_request and request_type == "read":
+# ESP reading relay state
+if "read" in params:
     try:
         with open(RELAY_FILE, "r") as f:
             data = f.read()
@@ -51,12 +37,12 @@ if is_esp_request and request_type == "read":
     st.text(data)
     st.stop()
 
-# Dashboard UI (only shown for browser requests)
+# Dashboard
 st.title("ESP8266 Relay Control")
 
 # Read relay state
 with open(RELAY_FILE, "r") as f:
-    relays = f.read().ljust(8)[:8]  # Ensure exactly 8 chars
+    relays = f.read().ljust(8)[:8]
 
 # Read heartbeat
 with open(HB_FILE, "r") as f:
@@ -71,20 +57,17 @@ else:
 
 st.write(f"**Last heartbeat:** {int(age)} seconds ago")
 
-# Relay status display
-st.subheader("Relay Status")
+# Relay display
 cols = st.columns(8)
 for i in range(8):
     status = "ON" if relays[i] == 'G' else "OFF"
-    color = "green" if relays[i] == 'G' else "red"
     with cols[i]:
-        st.metric(f"R{i+1}", status, delta=None, delta_color=color)
+        st.metric(f"R{i+1}", status)
 
-# Manual relay control (optional)
-st.subheader("Manual Control")
-new_relays = st.text_input("Relay state (8 chars, G=ON, R=OFF)", value=relays)
-if st.button("Update Relays"):
+# Manual control
+new_state = st.text_input("Relay state (RRRRRRRR/G mix)", value=relays)
+if st.button("Update"):
     with open(RELAY_FILE, "w") as f:
-        f.write(new_relays[:8].upper())
-    st.success("Relay state updated!")
+        f.write(new_state[:8].upper())
+    st.success("Updated!")
     st.rerun()
