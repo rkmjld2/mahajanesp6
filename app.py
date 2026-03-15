@@ -1,10 +1,10 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 
-const char* ssid = "YOUR_WIFI";
-const char* password = "YOUR_PASS";
+const char* ssid = "Airtel_56";
+const char* password = "Raviuma5658";
 
-String server = "https://your-app.streamlit.app/?heartbeat=1";
+String server = "https://mahajanesp6a.streamlit.app/?heartbeat=1";
 
 unsigned long lastHB = 0;
 
