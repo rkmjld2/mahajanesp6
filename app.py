@@ -16,21 +16,20 @@ if not os.path.exists(HB_FILE):
 
 params = st.query_params
 
-# Heartbeat from ESP
-if "heartbeat" in params:
+# Heartbeat from ESP - check for specific value to avoid false positives
+if "heartbeat" in params and params["heartbeat"][0] == "1":
     with open(HB_FILE, "w") as f:
         f.write(str(time.time()))
     st.text("OK")
     st.stop()
 
 # ESP reading relay state
-if "read" in params:
+if "read" in params and params["read"][0] == "1":
     try:
         with open(RELAY_FILE, "r") as f:
             data = f.read()
     except:
         data = "RRRRRRRR"
-
     st.text(data)
     st.stop()
 
