@@ -4,8 +4,8 @@
 
 const char* ssid="Airtel_56";
 const char* password="Raviuma5658";
-
-String server="https://mahajanesp6.streamlit.app";
+String server = "https://mahajan246.pythonanywhere.com";
+//String server="https://mahajanesp6.streamlit.app";
 
 int relayPins[9]={16,5,4,0,2,14,12,13,15};
 
