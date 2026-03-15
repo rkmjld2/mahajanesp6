@@ -27,7 +27,7 @@ Serial.print(".");
 }
 
 Serial.println("Connected");
-Serial.println(WiFi,localIP());
+Serial.println(WiFi.localIP());
 client.setInsecure();
 
 for(int i=0;i<8;i++)
