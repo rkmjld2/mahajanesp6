@@ -4,7 +4,7 @@
 const char* ssid = "Airtel_56";
 const char* password = "Raviuma5658";
 
-String server = "https://mahajanesp6a.streamlit.app/?heartbeat=1";
+String server = "https://mahajanesp6.streamlit.app/?heartbeat=1";
 
 unsigned long lastHB = 0;
 
