@@ -20,7 +20,12 @@ if not os.path.exists(HB_FILE):
 # ESP calls: your-app-url/?heartbeat=1
 # or: your-app-url/?read=1
 # ────────────────────────────────────────────────
-query_params = st.experimental_get_query_params()
+# ────────────────────────────────────────────────
+# Handle ESP8266 requests via query params
+# ESP calls: your-app-url/?heartbeat=1
+# or: your-app-url/?read=1
+# ────────────────────────────────────────────────
+query_params = st.query_params  # ✅ works on Streamlit Cloud
 
 if "heartbeat" in query_params:
     now_str = str(time.time())
@@ -37,6 +42,7 @@ if "read" in query_params:
     except:
         st.write("RRRRRRRR")
     st.stop()
+
 
 # ────────────────────────────────────────────────
 # Normal dashboard (browser view)
