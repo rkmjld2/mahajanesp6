@@ -1,146 +1,42 @@
-import streamlit as st
-import time
-import os
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 
-# ------------------------------
-# Files (temporary on Streamlit)
-# ------------------------------
-RELAY_FILE = "relay.txt"
-HB_FILE = "last_hb_time.txt"
+const char* ssid = "YOUR_WIFI";
+const char* password = "YOUR_PASS";
 
-# ------------------------------
-# Initialize files if missing
-# ------------------------------
-def init_files():
-    if not os.path.exists(RELAY_FILE):
-        with open(RELAY_FILE, "w") as f:
-            f.write("RRRRRRRR")
+String server = "https://your-app.streamlit.app/?heartbeat=1";
 
-    if not os.path.exists(HB_FILE):
-        with open(HB_FILE, "w") as f:
-            f.write("0")
+unsigned long lastHB = 0;
 
-init_files()
+void setup() {
+  Serial.begin(115200);
+  WiFi.begin(ssid, password);
 
-# ------------------------------
-# Query parameters from ESP
-# ------------------------------
-params = st.query_params
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
-# ESP heartbeat
-if "heartbeat" in params:
-    now = str(time.time())
-    with open(HB_FILE, "w") as f:
-        f.write(now)
+  Serial.println("WiFi Connected");
+}
 
-    st.text("OK")
-    st.stop()
+void loop() {
 
-# ESP reading relay states
-if "read" in params:
-    try:
-        with open(RELAY_FILE, "r") as f:
-            data = f.read().strip()
-            if len(data) != 8:
-                data = "RRRRRRRR"
-    except:
-        data = "RRRRRRRR"
+  if (millis() - lastHB > 5000) {
 
-    st.text(data)
-    st.stop()
+    if (WiFi.status() == WL_CONNECTED) {
 
-# ------------------------------
-# Dashboard UI
-# ------------------------------
-st.set_page_config(page_title="ESP8266 Relay Control", layout="wide")
+      HTTPClient http;
+      http.begin(server);
 
-st.title("ESP8266 Relay Control Dashboard")
+      int httpCode = http.GET();
 
-# ------------------------------
-# Read relay state
-# ------------------------------
-try:
-    with open(RELAY_FILE, "r") as f:
-        relays = f.read().strip()
-        if len(relays) != 8:
-            relays = "RRRRRRRR"
-except:
-    relays = "RRRRRRRR"
+      Serial.print("Heartbeat response: ");
+      Serial.println(httpCode);
 
-# ------------------------------
-# Read heartbeat
-# ------------------------------
-try:
-    with open(HB_FILE, "r") as f:
-        last_hb = float(f.read().strip())
-except:
-    last_hb = 0
+      http.end();
+    }
 
-age = time.time() - last_hb
-
-is_online = age < 20
-
-status_text = "ONLINE" if is_online else "OFFLINE"
-status_color = "green" if is_online else "red"
-
-# ------------------------------
-# Status indicator
-# ------------------------------
-st.markdown(
-    f"""
-    <div style="
-        width:140px;
-        height:140px;
-        border-radius:50%;
-        background:{status_color};
-        margin:auto;
-    "></div>
-    """,
-    unsafe_allow_html=True
-)
-
-st.subheader(status_text)
-st.caption(f"Last heartbeat {int(age)} sec ago")
-
-st.markdown("---")
-
-# ------------------------------
-# Relay Controls
-# ------------------------------
-st.subheader("Relay Control")
-
-cols = st.columns(4)
-
-for i in range(8):
-
-    col = cols[i % 4]
-
-    with col:
-
-        state = "ON" if relays[i] == "G" else "OFF"
-        color = "green" if state == "ON" else "red"
-
-        next_state = "R" if relays[i] == "G" else "G"
-
-        st.markdown(f"### Relay {i+1}")
-        st.markdown(
-            f"<h4 style='color:{color}'>{state}</h4>",
-            unsafe_allow_html=True
-        )
-
-        if st.button("Toggle", key=f"relay{i}"):
-
-            relays_list = list(relays)
-            relays_list[i] = next_state
-            relays = "".join(relays_list)
-
-            with open(RELAY_FILE, "w") as f:
-                f.write(relays)
-
-            st.rerun()
-
-# ------------------------------
-# Auto refresh every 5 sec
-# ------------------------------
-time.sleep(5)
-st.rerun()
+    lastHB = millis();
+  }
+}
