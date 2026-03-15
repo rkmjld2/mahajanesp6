@@ -25,8 +25,11 @@ if not os.path.exists(HB_FILE):
 # ESP calls: your-app-url/?heartbeat=1
 # or: your-app-url/?read=1
 # ────────────────────────────────────────────────
-query_params = st.query_params  # ✅ works on Streamlit Cloud
-
+#query_params = st.query_params  # ✅ works on Streamlit Cloud
+try:
+    query_params = st.query_params
+except AttributeError:
+    query_params = st.experimental_get_query_params()
 if "heartbeat" in query_params:
     now_str = str(time.time())
     with open(HB_FILE, "w") as f:
