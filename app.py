@@ -1,95 +1,186 @@
-from flask import Flask, request
-import time
-import os
+from flask import Flask, request, jsonify, render_template, send_file
+import csv, os, time
 
 app = Flask(__name__)
 
-RELAY_FILE = "relay.txt"
-HB_FILE = "last_hb_time.txt"
+# -------- CONFIG --------
+DATA_FILE = "sensor_data.csv"
+API_KEY = "12b5112c62284ea0b3da0039f298ec7a85ac9a1791044052b6df970640afb1c5"
 
-# Create files if missing
-open(RELAY_FILE, 'a').close()
-open(HB_FILE, 'a').close()
+last_seen = 0
+collect_data = True
 
-@app.route('/heartbeat', methods=['GET'])
-def heartbeat():
-    with open(HB_FILE, 'w') as f:
-        f.write(str(time.time()))
-    return "OK"
 
-@app.route('/read', methods=['GET'])
-def read_relay():
+# -------- INIT FILE --------
+if not os.path.exists(DATA_FILE):
+    with open(DATA_FILE, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["id","sensor1","sensor2","sensor3","time"])
+
+
+# -------- RECEIVE DATA --------
+@app.route("/api/data")
+def receive():
+    global last_seen, collect_data
+
+    key = request.args.get("key")
+    if key != API_KEY:
+        return "Invalid Key", 403
+
+    last_seen = time.time()
+
+    if not collect_data:
+        return "Stopped"
+
     try:
-        with open(RELAY_FILE, 'r') as f:
-            return f.read()
-    except:
-        return "RRRRRRRR"
+        s1 = request.args.get("s1")
+        s2 = request.args.get("s2")
+        s3 = request.args.get("s3")
+        now = request.args.get("time")
 
-@app.route('/', methods=['GET', 'POST'])
-def dashboard():
-    relays = "RRRRRRRR"
-    try:
-        with open(RELAY_FILE, 'r') as f:
-            relays = f.read()[:8].ljust(8, 'R')
-    except:
-        pass
-    
-    try:
-        with open(HB_FILE, 'r') as f:
-            last = float(f.read())
-            age = time.time() - last
-            status = "🟢 ONLINE" if age < 30 else "🔴 OFFLINE"
-            age_text = f"{int(age)}s ago"
-    except:
-        status = "🔴 OFFLINE"
-        age_text = "Never"
-    
-    if request.method == 'POST':
-        new_relays = request.form.get('relays', relays)[:8].upper()
-        with open(RELAY_FILE, 'w') as f:
-            f.write(new_relays)
-        return dashboard()
-    
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head><title>ESP8266 Control</title>
-    <meta http-equiv="refresh" content="5">
-    <style>
-    body {{ font-family: Arial; margin: 40px; }}
-    .status {{ font-size: 24px; font-weight: bold; padding: 10px; }}
-    .online {{ background: #d4edda; color: #155724; }}
-    .offline {{ background: #f8d7da; color: #721c24; }}
-    .relay {{ display: inline-block; width: 80px; margin: 5px; padding: 10px; text-align: center; border-radius: 5px; }}
-    .on {{ background: #d4edda; color: #155724; }}
-    .off {{ background: #f8d7da; color: #721c24; }}
-    input {{ width: 200px; padding: 8px; }}
-    button {{ padding: 8px 20px; background: #007bff; color: white; border: none; border-radius: 5px; }}
-    </style>
-    </head>
-    <body>
-        <h1>ESP8266 Relay Control</h1>
-        <div class="status {'online' if 'ONLINE' in status else 'offline'}">{status}</div>
-        <p>Last heartbeat: {age_text}</p>
-        
-        <h2>Relay Status: {relays}</h2>
-        <div>
-        """
-    for i in range(8):
-        status = "ON" if relays[i] == 'G' else "OFF"
-        cls = "on" if relays[i] == 'G' else "off"
-        html += f'<div class="relay {cls}">R{i+1}: {status}</div>'
-    
-    html += f"""
-        </div>
-        <form method="POST">
-            <p>Relay state: <input name="relays" value="{relays}" maxlength="8">
-            <button>Update</button></p>
-        </form>
-    </body>
-    </html>
-    """
-    return html
+        # -------- READ OLD DATA --------
+        rows = []
+        with open(DATA_FILE, "r") as f:
+            rows = list(csv.DictReader(f))
 
-if __name__ == '__main__':
-    app.run()
+        # -------- DUPLICATE CHECK --------
+        for r in rows:
+            if r["time"] == now and r["sensor1"] == s1 and r["sensor2"] == s2:
+                return "Duplicate"
+
+        # -------- ID GENERATE --------
+        if len(rows) == 0:
+            new_id = 1
+        else:
+            new_id = int(rows[-1]["id"]) + 1
+
+        # -------- SAVE --------
+        with open(DATA_FILE, "a", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([new_id, s1, s2, s3, now])
+
+        print("Saved:", new_id)
+
+        return "OK"
+
+    except Exception as e:
+        print("Error:", e)
+        return "Error", 500
+
+
+# -------- ALL DATA --------
+@app.route("/api/all")
+def all_data():
+    try:
+        with open(DATA_FILE, "r") as f:
+            return jsonify(list(csv.DictReader(f)))
+    except:
+        return jsonify([])
+
+
+# -------- DOWNLOAD --------
+@app.route("/download")
+def download():
+    return send_file(DATA_FILE, as_attachment=True)
+
+
+# -------- DELETE --------
+@app.route("/delete")
+def delete():
+    start = int(request.args.get("start"))
+    end = int(request.args.get("end"))
+
+    with open(DATA_FILE, "r") as f:
+        rows = list(csv.DictReader(f))
+
+    rows = [r for r in rows if not (start <= int(r["id"]) <= end)]
+
+    with open(DATA_FILE, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["id","sensor1","sensor2","sensor3","time"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return "Deleted"
+
+
+# -------- STATUS --------
+@app.route("/status")
+def status():
+    if time.time() - last_seen < 15:
+        return jsonify({"status": "Connected"})
+    else:
+        return jsonify({"status": "Disconnected"})
+
+
+# -------- CONTROL --------
+@app.route("/start")
+def start():
+    global collect_data
+    collect_data = True
+    return "Started"
+
+@app.route("/stop")
+def stop():
+    global collect_data
+    collect_data = False
+    return "Stopped"
+
+
+# -------- HOME --------
+@app.route("/")
+def home():
+    return render_template("index.html")
+# -------- QUERY COMMAND --------
+@app.route("/query")
+def query():
+    cmd = request.args.get("cmd")
+
+    try:
+        if not cmd:
+            return "No command"
+
+        parts = cmd.strip().split()
+
+        # -------- DELETE --------
+        if parts[0].lower() == "delete" and len(parts) == 3:
+            start = int(parts[1])
+            end = int(parts[2])
+
+            with open(DATA_FILE, "r") as f:
+                rows = list(csv.DictReader(f))
+
+            rows = [r for r in rows if not (start <= int(r["id"]) <= end)]
+
+            with open(DATA_FILE, "w", newline="") as f:
+                writer = csv.DictWriter(f, fieldnames=["id","sensor1","sensor2","sensor3","time"])
+                writer.writeheader()
+                writer.writerows(rows)
+
+            return "Deleted"
+
+        # -------- SEARCH --------
+        elif parts[0].lower() == "search" and len(parts) == 3:
+            start = int(parts[1])
+            end = int(parts[2])
+
+            with open(DATA_FILE, "r") as f:
+                rows = list(csv.DictReader(f))
+
+            result = [r for r in rows if start <= int(r["id"]) <= end]
+
+            return jsonify(result)
+
+        # -------- SHOW ALL --------
+        elif parts[0].lower() == "all":
+            with open(DATA_FILE, "r") as f:
+                return jsonify(list(csv.DictReader(f)))
+
+        else:
+            return "Unknown Command"
+
+    except Exception as e:
+        return "Error: " + str(e)
+
+# -------- RUN --------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
